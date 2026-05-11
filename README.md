@@ -37,7 +37,10 @@ docker run -d --name redis -p 6379:6379 redis:alpine
 
 ```bash
 # Worker 1
+## En caso de utilizar Docker Desktop
 docker run -d --name worker1 -e REDIS_HOST=host.docker.internal my-worker
+## En caso de utilizar Linux (o instancia de AWS)
+docker run -d --name worker1 -e REDIS_HOST=<IP-PRIVADA>
 
 # Worker 2 (opcional, para probar concurrencia)
 docker run -d --name worker2 -e REDIS_HOST=host.docker.internal my-worker
@@ -49,7 +52,7 @@ docker logs -f worker1
 docker logs -f worker2
 ```
 
-## 4. Encolar imágenes de prueba
+## 4. Encolar imágenes de prueba a Redis
 
 Ver el directorio con imágenes:
 Si quieres cargar más imágenes esta es una muestra tomada de [Kaggle](https://www.kaggle.com/datasets/steubk/wikiart?resource=download).
@@ -58,7 +61,7 @@ Si quieres cargar más imágenes esta es una muestra tomada de [Kaggle](https://
 ls images
 ```
 
-Ejecutar el enqueuer (necesita `redis` instalado localmente o usar el contenedor de Redis):
+Ejecutar el enqueuer (necesita la librería `redis` y Redis funcionando):
 
 ### Opción A: Con Python local
 ```bash
@@ -76,7 +79,7 @@ docker run --rm \
   bash -c "pip install redis && python /enqueue_images.py /images"
 ```
 
-## 5. Verificar que los workers procesaron los mensajes
+## 5. Verificar que los workers procesaron las mensajes
 
 ```bash
 docker logs worker1
@@ -96,11 +99,35 @@ docker stop worker1 worker2 redis
 docker rm worker1 worker2 redis
 ```
 
+## Otros comandos de Docker para detener y eliminar contenedores
+
+Detener y remover a un contenedore en ejecución
+
+```bash
+docker rm -f nombre_contenedor
+```
+
+Crear un contenedor efímero 
+
+```bash
+docker run --rm redis
+```
+
+Eliminar todos los contenedores
+
+```bash
+docker container prune -f
+```
+
 ## Notas (Docker manual)
 
 - `host.docker.internal` permite que los contenedores se conecten a servicios en la máquina host (Redis en `localhost:6379`).
 - En Linux, si `host.docker.internal` no funciona, usa la IP de la máquina host o `--network host`.
 - El worker maneja `SIGTERM` correctamente, así que `docker stop` lo detiene limpiamente.
+
+
+
+
 
 ---
 
