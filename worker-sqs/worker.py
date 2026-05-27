@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 import s3image
 
 SQS_URL = os.environ.get('SQS_URL')
-SQS_URL = 'https://sqs.us-east-1.amazonaws.com/310719310483/MiQueue'
+SQS_URL = 'https://sqs.us-east-1.amazonaws.com/197659111769/MyQueue'
 
 REDIS_HOST = os.environ.get('REDIS_HOST')
 if not REDIS_HOST:
