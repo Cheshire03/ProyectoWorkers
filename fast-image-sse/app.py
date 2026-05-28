@@ -57,7 +57,7 @@ def s3_generate_presigned_post(*, file_path: str, file_type: str):
     expires_in = 1000
 
     presigned_data = s3_client.generate_presigned_post(
-        'tijuana-objects',
+        'yeidi-objects',
         file_path,
         Fields={
             "acl": acl,
