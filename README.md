@@ -1,6 +1,6 @@
 # CSV Worker — Procesamiento Distribuido Cloud Native
 
-Aplicación web para procesar archivos CSV mediante workers distribuidos en contenedores Docker, usando AWS SQS como cola de mensajes, S3 para almacenamiento y Redis para estado en tiempo real.
+El proyecto consiste en una aplicación web de procesamiento distribuido que permite al usuario cargar archivos en formato CSV, elegir una operación y obtener los resultados. Funciona a través de “workers” que procesan tareas de forma síncrona, los cuales se ejecutan en contenedores Docker y son coordinados mediante una cola de mensajes en AWS SQS.
 
 ## Arquitectura
 
@@ -23,6 +23,19 @@ FastAPI (API)
                                 ▼
                     FastAPI SSE ──▶ Frontend (dashboard en tiempo real)
 ```
+
+## Frontend
+La interfaz web está construida con HTML, CSS y JavaScript. En el sitio el usuario sube cualquier archivo CSV, elige una operación y puede ver el estado de cada tarea en tiempo real. 
+
+## Backend
+Se utilizó FastAPI, actuando como intermediario entre el frontend, AWS y los workers. Al ingresar un CSV en el frontend, el backend lo recibe, lo almacena en S3, encola la tarea en SQS y expone los endpoints necesarios para consultar estados y resultados.
+
+## Workers
+Procesos de Python que corren dentro de contenedores Docker. Los workers escuchan la cola SQS de forma independiente, toman tareas al estar disponibles, descargan el archivo CSV desde S3, ejecutan la operación con pandas y guardan el resultado de vuelta en S3. El sistema corre tres workers en paralelo.
+
+## Redis
+Base de datos de estado y canal de comunicación en tiempo real. Los workers escriben el estado de cada tarea y publican eventos que el backend reenvía al frontend via SSE.
+
 
 ## Tecnologías
 
@@ -63,6 +76,7 @@ proyecto/
         └── summary.py
 ```
 
+
 ## Operaciones disponibles
 
 | Operación | Descripción | Parámetros extra |
@@ -72,129 +86,3 @@ proyecto/
 | `validate` | Detecta filas inválidas, nulos y duplicados | Ninguno |
 | `filter` | Filtra filas según condición | `columna`, `operador`, `valor` |
 | `sort` | Ordena el CSV por una o varias columnas | `columna`, `ascendente` |
-
-### Ejemplos de parámetros para `filter` y `sort`
-
-```json
-// filter: filas donde precio > 100
-{ "columna": "precio", "operador": ">", "valor": 100 }
-
-// sort: ordenar por fecha descendente
-{ "columna": "fecha", "ascendente": false }
-```
-
-## Requisitos previos
-
-- EC2 con IAM Role que tenga permisos sobre SQS y S3
-- Docker y Docker Compose instalados
-- Puerto `8000` abierto en el Security Group
-
-Verificar Docker Compose:
-```bash
-docker compose version
-```
-
-Verificar acceso a AWS:
-```bash
-aws sts get-caller-identity
-aws s3 ls s3://yeidi-objects
-aws sqs get-queue-attributes \
-  --queue-url https://sqs.us-east-1.amazonaws.com/197659111769/MyQueue \
-  --attribute-names All
-```
-
-## Instalación y uso
-
-### 1. Clonar el repositorio
-
-```bash
-git clone <tu-repo>
-cd proyecto
-```
-
-### 2. Primera vez — construir y levantar
-
-```bash
-docker compose up --build -d
-```
-
-Esto levanta:
-- `redis` — base de datos de estado
-- `api` — FastAPI en el puerto 8000
-- `worker` — 3 instancias procesando tareas
-
-### 3. Verificar que todo está corriendo
-
-```bash
-docker compose ps
-```
-
-Deberías ver:
-```
-NAME        STATUS
-redis       running
-api         running
-worker-1    running
-worker-2    running
-worker-3    running
-```
-
-### 4. Abrir la aplicación
-
-```
-http://TU_IP_ELASTICA:8000
-```
-
-La documentación interactiva de la API está en:
-```
-http://TU_IP_ELASTICA:8000/docs
-```
-
-## Comandos del día a día
-
-| Situación | Comando |
-|---|---|
-| Primera vez o cambié código | `docker compose up --build -d` |
-| Reiniciar sin cambios | `docker compose restart` |
-| Ver logs en vivo | `docker compose logs -f` |
-| Ver logs solo de workers | `docker compose logs -f worker` |
-| Ver logs solo de la API | `docker compose logs -f api` |
-| Ver contenedores activos | `docker compose ps` |
-| Apagar todo | `docker compose down` |
-| Apagar y eliminar imágenes | `docker compose down --rmi all` |
-
-## Endpoints de la API
-
-| Método | Endpoint | Descripción |
-|---|---|---|
-| `POST` | `/tasks` | Sube CSV y encola tarea |
-| `GET` | `/tasks/{task_id}` | Estado de una tarea |
-| `GET` | `/tasks/{task_id}/result` | Resultado de una tarea completada |
-| `GET` | `/workers` | Estado de los workers activos |
-| `GET` | `/sse/tasks` | Stream de eventos en tiempo real (SSE) |
-| `GET` | `/health` | Salud del sistema |
-
-## Estados de una tarea
-
-```
-pendiente ──▶ en_proceso ──▶ completada
-                    └──────▶ error
-```
-
-| Estado | Descripción |
-|---|---|
-| `pendiente` | Tarea encolada en SQS, esperando worker |
-| `en_proceso` | Un worker tomó la tarea y está procesando |
-| `completada` | Procesamiento exitoso, resultado en S3 |
-| `error` | Ocurrió un error durante el procesamiento |
-
-## Flujo de una tarea
-
-1. Usuario sube un CSV y elige una operación desde el frontend
-2. FastAPI guarda el CSV en **S3** (`uploads/`)
-3. FastAPI encola un mensaje en **SQS** con el `task_id`, `s3_key` y `operation`
-4. Un worker libre toma el mensaje de SQS
-5. El worker descarga el CSV desde S3 y actualiza el estado en Redis a `en_proceso`
-6. El worker procesa el CSV y guarda el resultado en S3 (`results/`)
-7. El worker actualiza el estado en Redis a `completada`
-8. El frontend recibe el update via **SSE** y muestra el resultado
