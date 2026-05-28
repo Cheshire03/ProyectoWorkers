@@ -351,3 +351,37 @@ body {
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .main { padding: 16px; }
 }
+
+/* ── File list ───────────────────────────────────────────────────────────── */
+.file-list {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--olive-pale);
+  border: 0.5px solid var(--olive-mid);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-mid);
+}
+.file-item svg { flex-shrink: 0; color: var(--olive-light); }
+.file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { color: var(--text-muted); flex-shrink: 0; }
+.file-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.file-remove:hover { background: #fee2e2; color: #991b1b; }
+.upload-zone.drag-over { border-color: var(--olive); background: #dde8c0; }

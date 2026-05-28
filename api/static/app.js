@@ -1,10 +1,10 @@
-const API = ''  // mismo origen, FastAPI sirve el frontend
+const API = ''
 
 // ── Estado local ──────────────────────────────────────────────────────────────
 const state = {
-  tasks: {},      // task_id → task data
+  tasks: {},
   workers: [],
-  selectedFile: null,
+  selectedFiles: [],
 }
 
 // ── Navegación ────────────────────────────────────────────────────────────────
@@ -19,30 +19,63 @@ function showSection(name, el) {
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 function onFileSelected(input) {
-  const file = input.files[0]
-  if (!file) return
-  state.selectedFile = file
+  addFiles(Array.from(input.files))
+  input.value = ''
+}
+
+function addFiles(files) {
+  const csvFiles = files.filter(f => f.name.endsWith('.csv'))
+  csvFiles.forEach(f => {
+    if (!state.selectedFiles.find(sf => sf.name === f.name)) {
+      state.selectedFiles.push(f)
+    }
+  })
+  renderFileList()
+  document.getElementById('btn-submit').disabled = state.selectedFiles.length === 0
+}
+
+function removeFile(index) {
+  state.selectedFiles.splice(index, 1)
+  renderFileList()
+  document.getElementById('btn-submit').disabled = state.selectedFiles.length === 0
+}
+
+function renderFileList() {
+  const list = document.getElementById('file-list')
   const zone = document.getElementById('upload-zone')
+
+  if (state.selectedFiles.length === 0) {
+    zone.classList.remove('has-file')
+    document.getElementById('upload-text').textContent = 'Arrastra tus CSVs aquí'
+    document.getElementById('upload-hint').textContent = 'o haz click para seleccionar (puedes subir varios)'
+    list.innerHTML = ''
+    list.style.display = 'none'
+    return
+  }
+
   zone.classList.add('has-file')
-  document.getElementById('upload-text').textContent = file.name
-  document.getElementById('upload-hint').textContent = (file.size / 1024).toFixed(1) + ' KB'
-  document.getElementById('btn-submit').disabled = false
+  document.getElementById('upload-text').textContent = `${state.selectedFiles.length} archivo${state.selectedFiles.length > 1 ? 's' : ''} seleccionado${state.selectedFiles.length > 1 ? 's' : ''}`
+  document.getElementById('upload-hint').textContent = 'Se procesarán en paralelo'
+
+  list.style.display = 'block'
+  list.innerHTML = state.selectedFiles.map((f, i) => `
+    <div class="file-item">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span class="file-name">${f.name}</span>
+      <span class="file-size">${(f.size/1024).toFixed(1)} KB</span>
+      <button class="file-remove" onclick="removeFile(${i})" title="Quitar">✕</button>
+    </div>
+  `).join('')
 }
 
 // Drag & drop
 const zone = document.getElementById('upload-zone')
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('has-file') })
-zone.addEventListener('dragleave', () => { if (!state.selectedFile) zone.classList.remove('has-file') })
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over') })
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'))
 zone.addEventListener('drop', e => {
   e.preventDefault()
-  const file = e.dataTransfer.files[0]
-  if (file && file.name.endsWith('.csv')) {
-    state.selectedFile = file
-    zone.classList.add('has-file')
-    document.getElementById('upload-text').textContent = file.name
-    document.getElementById('upload-hint').textContent = (file.size / 1024).toFixed(1) + ' KB'
-    document.getElementById('btn-submit').disabled = false
-  }
+  zone.classList.remove('drag-over')
+  addFiles(Array.from(e.dataTransfer.files))
 })
 
 function onOperationChange() {
@@ -53,14 +86,12 @@ function onOperationChange() {
 
 // ── Submit task ───────────────────────────────────────────────────────────────
 async function submitTask() {
-  const file = state.selectedFile
-  const op   = document.getElementById('operation').value
+  const op    = document.getElementById('operation').value
   const errEl = document.getElementById('submit-error')
   errEl.style.display = 'none'
 
-  if (!file) { showError(errEl, 'Selecciona un archivo CSV.'); return }
+  if (state.selectedFiles.length === 0) { showError(errEl, 'Selecciona al menos un archivo CSV.'); return }
 
-  // Construir params
   let params = {}
   if (op === 'filter') {
     params = {
@@ -84,7 +115,7 @@ async function submitTask() {
 
   try {
     const fd = new FormData()
-    fd.append('file', file)
+    state.selectedFiles.forEach(f => fd.append('files', f))
     fd.append('operation', op)
     fd.append('params', JSON.stringify(params))
 
@@ -93,17 +124,14 @@ async function submitTask() {
 
     if (!res.ok) { showError(errEl, data.detail || 'Error al enviar la tarea.'); return }
 
-    // Agregar al estado local
-    state.tasks[data.task_id] = data
+    // Agregar todas las tareas al estado
+    data.tasks.forEach(t => { state.tasks[t.task_id] = t })
     renderTasksTable()
     updateMetrics()
 
     // Reset form
-    state.selectedFile = null
-    document.getElementById('file-input').value = ''
-    document.getElementById('upload-zone').classList.remove('has-file')
-    document.getElementById('upload-text').textContent = 'Arrastra tu CSV aquí'
-    document.getElementById('upload-hint').textContent = 'o haz click para seleccionar'
+    state.selectedFiles = []
+    renderFileList()
 
   } catch (e) {
     showError(errEl, 'Error de conexión con la API.')
@@ -118,23 +146,18 @@ function showError(el, msg) {
   el.style.display = 'block'
 }
 
-// ── SSE — recibir updates en tiempo real ──────────────────────────────────────
+// ── SSE ───────────────────────────────────────────────────────────────────────
 function connectSSE() {
   const dot = document.getElementById('sse-dot')
   const lbl = document.getElementById('sse-label')
   const es  = new EventSource(API + '/sse/tasks')
 
-  es.onopen = () => {
-    dot.classList.add('connected')
-    lbl.textContent = 'Conectado'
-  }
+  es.onopen = () => { dot.classList.add('connected'); lbl.textContent = 'Conectado' }
 
   es.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data)
       if (!data.task_id) return
-
-      // Actualizar tarea en estado
       state.tasks[data.task_id] = { ...state.tasks[data.task_id], ...data }
       renderTasksTable()
       renderTasksTable2()
@@ -150,33 +173,27 @@ function connectSSE() {
   }
 }
 
-// ── Render tabla principal ────────────────────────────────────────────────────
+// ── Render tablas ─────────────────────────────────────────────────────────────
 function renderTasksTable() {
-  const tasks  = Object.values(state.tasks).reverse()
-  const tbody  = document.getElementById('tasks-tbody')
-  const empty  = document.getElementById('tasks-empty')
-  const wrap   = document.getElementById('tasks-table-wrap')
+  const tasks = Object.values(state.tasks).reverse()
+  const tbody = document.getElementById('tasks-tbody')
+  const empty = document.getElementById('tasks-empty')
+  const wrap  = document.getElementById('tasks-table-wrap')
 
-  if (tasks.length === 0) {
-    empty.style.display = 'block'
-    wrap.style.display  = 'none'
-    return
-  }
-  empty.style.display = 'none'
-  wrap.style.display  = 'block'
+  if (tasks.length === 0) { empty.style.display = 'block'; wrap.style.display = 'none'; return }
+  empty.style.display = 'none'; wrap.style.display = 'block'
 
-  tbody.innerHTML = tasks.slice(0, 10).map(t => `
+  tbody.innerHTML = tasks.slice(0, 15).map(t => `
     <tr>
       <td title="${t.filename || ''}">${t.filename || '—'}</td>
       <td><span class="op-badge">${t.operation || '—'}</span></td>
       <td>${statusBadge(t.status)}</td>
       <td style="color:#8a9a6a;font-size:12px">${t.worker_id || '—'}</td>
-      <td>${actionBtn(t)}</td>
+      <td>${actionBtns(t)}</td>
     </tr>
   `).join('')
 }
 
-// ── Render tabla sección Tareas ───────────────────────────────────────────────
 function renderTasksTable2() {
   const tasks = Object.values(state.tasks).reverse()
   const tbody = document.getElementById('tasks-tbody-2')
@@ -193,31 +210,30 @@ function renderTasksTable2() {
       <td><span class="op-badge">${t.operation || '—'}</span></td>
       <td>${statusBadge(t.status)}</td>
       <td style="color:#8a9a6a;font-size:12px">${t.worker_id || '—'}</td>
-      <td>${actionBtn(t)}</td>
+      <td>${actionBtns(t)}</td>
     </tr>
   `).join('')
 }
 
 function statusBadge(status) {
-  const map = {
-    pendiente:  'badge-pending',
-    en_proceso: 'badge-processing',
-    completada: 'badge-done',
-    error:      'badge-error',
-  }
+  const map = { pendiente: 'badge-pending', en_proceso: 'badge-processing', completada: 'badge-done', error: 'badge-error' }
   return `<span class="badge ${map[status] || 'badge-pending'}">${status || 'pendiente'}</span>`
 }
 
-function actionBtn(t) {
-  if (t.status === 'completada') {
-    return `<button class="btn-icon green" title="Ver resultado" onclick="viewResult('${t.task_id}')">
-      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </button>`
-  }
-  return ''
+function actionBtns(t) {
+  if (t.status !== 'completada') return ''
+  return `
+    <div style="display:flex;gap:4px">
+      <button class="btn-icon green" title="Ver resultado" onclick="viewResult('${t.task_id}')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button class="btn-icon" title="Descargar resultado" onclick="downloadResult('${t.task_id}')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>`
 }
 
-// ── Ver resultado ─────────────────────────────────────────────────────────────
+// ── Ver resultado en modal ────────────────────────────────────────────────────
 async function viewResult(taskId) {
   try {
     const res  = await fetch(API + '/tasks/' + taskId + '/result')
@@ -228,6 +244,11 @@ async function viewResult(taskId) {
   } catch (e) {
     alert('Error obteniendo resultado.')
   }
+}
+
+// ── Descargar resultado como archivo ─────────────────────────────────────────
+function downloadResult(taskId) {
+  window.location.href = API + '/tasks/' + taskId + '/download'
 }
 
 function closeModal(e) {
@@ -255,7 +276,6 @@ function renderWorkersSidebar() {
     count.textContent = ''
     return
   }
-
   el.innerHTML = active.map(w => `
     <div class="worker-chip">
       <div class="dot ${w.active ? 'dot-green' : 'dot-gray'}"></div>
@@ -268,7 +288,7 @@ function renderWorkersSidebar() {
 function renderWorkersSection() {
   const grid = document.getElementById('workers-grid')
   if (state.workers.length === 0) {
-    grid.innerHTML = '<p style="color:var(--text-muted);font-size:13px">No se detectaron workers. Asegúrate de que estén corriendo.</p>'
+    grid.innerHTML = '<p style="color:var(--text-muted);font-size:13px">No se detectaron workers.</p>'
     return
   }
   grid.innerHTML = state.workers.map(w => `
@@ -280,7 +300,7 @@ function renderWorkersSection() {
           ${w.status === 'busy' ? 'ocupado' : w.active ? 'libre' : 'inactivo'}
         </span>
       </div>
-      <div class="worker-meta">Último heartbeat: ${w.last_seen || 'desconocido'}</div>
+      <div class="worker-meta">Último heartbeat: ${w.last_seen}</div>
     </div>
   `).join('')
 }
@@ -296,4 +316,4 @@ function updateMetrics() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 connectSSE()
 fetchWorkers()
-setInterval(fetchWorkers, 10000)  // refresca workers cada 10s
+setInterval(fetchWorkers, 10000)

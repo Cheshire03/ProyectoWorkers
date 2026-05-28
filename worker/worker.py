@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 # ── Configuración ────────────────────────────────────────────────────────────
 AWS_REGION    = os.getenv("AWS_REGION", "us-east-1")
-SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")   # URL (no ARN) de la cola
+SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL") 
 S3_BUCKET     = os.getenv("S3_BUCKET", "yeidi-objects")
 REDIS_HOST    = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT    = int(os.getenv("REDIS_PORT", 6379))
