@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV Worker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      CSV Worker
+    </div>
+    <div class="nav-links">
+      <a class="nav-link active" href="#dashboard" onclick="showSection('dashboard', this)">Dashboard</a>
+      <a class="nav-link" href="#tareas" onclick="showSection('tareas', this)">Tareas</a>
+      <a class="nav-link" href="#workers" onclick="showSection('workers', this)">Workers</a>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <section id="section-dashboard">
+      <div class="metrics">
+        <div class="metric-card">
+          <div class="metric-label">Tareas totales</div>
+          <div class="metric-value" id="m-total">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Completadas</div>
+          <div class="metric-value green" id="m-done">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">En proceso</div>
+          <div class="metric-value amber" id="m-processing">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Workers activos</div>
+          <div class="metric-value green" id="m-workers">0</div>
+        </div>
+      </div>
+
+      <div class="content">
+        <!-- Panel izquierdo -->
+        <div class="left-panel">
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-header">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+              Nueva tarea
+            </div>
+            <div class="card-body">
+              <div id="upload-zone" class="upload-zone" onclick="document.getElementById('file-input').click()">
+                <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <p id="upload-text">Arrastra tu CSV aquí</p>
+                <span id="upload-hint">o haz click para seleccionar</span>
+              </div>
+              <input type="file" id="file-input" accept=".csv" style="display:none" onchange="onFileSelected(this)" />
+
+              <div class="form-group">
+                <label class="form-label">Operación</label>
+                <select class="form-select" id="operation" onchange="onOperationChange()">
+                  <option value="summary">summary — resumen general</option>
+                  <option value="statistics">statistics — estadísticas numéricas</option>
+                  <option value="validate">validate — validar datos</option>
+                  <option value="filter">filter — filtrar filas</option>
+                  <option value="sort">sort — ordenar</option>
+                </select>
+              </div>
+
+              <!-- Params para filter -->
+              <div id="params-filter" class="params-box" style="display:none">
+                <div class="form-group">
+                  <label class="form-label">Columna</label>
+                  <input type="text" class="form-input" id="filter-col" placeholder="ej: precio" />
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <div class="form-group">
+                    <label class="form-label">Operador</label>
+                    <select class="form-select" id="filter-op">
+                      <option>></option><option>>=</option>
+                      <option><</option><option><=</option>
+                      <option>==</option><option>!=</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Valor</label>
+                    <input type="text" class="form-input" id="filter-val" placeholder="ej: 100" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Params para sort -->
+              <div id="params-sort" class="params-box" style="display:none">
+                <div class="form-group">
+                  <label class="form-label">Columna</label>
+                  <input type="text" class="form-input" id="sort-col" placeholder="ej: fecha" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Orden</label>
+                  <select class="form-select" id="sort-dir">
+                    <option value="true">Ascendente (A → Z)</option>
+                    <option value="false">Descendente (Z → A)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button class="btn-submit" id="btn-submit" onclick="submitTask()" disabled>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Enviar tarea
+              </button>
+              <div id="submit-error" class="error-msg" style="display:none"></div>
+            </div>
+          </div>
+
+          <!-- Workers -->
+          <div class="card">
+            <div class="card-header">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+              Workers
+            </div>
+            <div class="card-body">
+              <div id="workers-list" class="workers-row">
+                <span class="workers-empty">Cargando workers...</span>
+              </div>
+              <p class="workers-count" id="workers-count"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de tareas -->
+        <div class="card">
+          <div class="card-header">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Tareas recientes
+          </div>
+          <div id="tasks-empty" class="tasks-empty">No hay tareas aún. Sube un CSV para comenzar.</div>
+          <div id="tasks-table-wrap" style="display:none;overflow-x:auto">
+            <table class="tasks-table">
+              <thead>
+                <tr>
+                  <th>Archivo</th>
+                  <th>Operación</th>
+                  <th>Estado</th>
+                  <th>Worker</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tasks-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAREAS -->
+    <section id="section-tareas" style="display:none">
+      <div class="section-title">Historial de tareas</div>
+      <div class="card">
+        <div id="tasks-empty-2" class="tasks-empty">No hay tareas registradas.</div>
+        <div id="tasks-table-wrap-2" style="display:none;overflow-x:auto">
+          <table class="tasks-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Archivo</th>
+                <th>Operación</th>
+                <th>Estado</th>
+                <th>Worker</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tasks-tbody-2"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- WORKERS -->
+    <section id="section-workers" style="display:none">
+      <div class="section-title">Estado de workers</div>
+      <div id="workers-grid" class="workers-grid"></div>
+    </section>
+
+  </main>
+
+  <!-- MODAL RESULTADO -->
+  <div id="result-modal" class="modal-overlay" style="display:none" onclick="closeModal(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="modal-title">Resultado</span>
+        <button class="modal-close" onclick="document.getElementById('result-modal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body">
+        <pre id="modal-content"></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="sse-indicator">
+    <div class="sse-dot" id="sse-dot"></div>
+    <span id="sse-label">Conectando...</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
